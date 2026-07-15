@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Closed Loop Landing Lab</title>
+
+    <style>
+      :root {
+        color: #17202a;
+        background: #f6f7fb;
+        font-family:
+          Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      main {
+        width: min(720px, 100%);
+        padding: 64px;
+        border-radius: 24px;
+        background: white;
+        box-shadow: 0 20px 60px rgb(30 40 70 / 12%);
+        text-align: center;
+      }
+
+      .variant {
+        color: #667085;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      h1 {
+        margin: 20px 0;
+        font-size: clamp(40px, 7vw, 64px);
+        line-height: 1.05;
+      }
+
+      .subheadline {
+        max-width: 580px;
+        margin: 0 auto 32px;
+        color: #475467;
+        font-size: 20px;
+        line-height: 1.6;
+      }
+
+      button {
+        min-height: 52px;
+        padding: 0 28px;
+        border: 0;
+        border-radius: 12px;
+        color: white;
+        background: #6941c6;
+        font-size: 17px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #53389e;
+      }
+
+      button:disabled {
+        cursor: default;
+        opacity: 0.65;
+      }
+
+      #message {
+        margin-top: 20px;
+        color: #067647;
+        font-weight: 600;
+      }
+
+      #error {
+        color: #b42318;
+      }
+    </style>
+
+    <!-- Paste the generated PostHog snippet here. -->
+  </head>
+
+  <body>
+    <main>
+      <div class="variant">
+        Landing page variant <span id="variant">...</span>
+      </div>
+
+      <h1 id="headline">Loading...</h1>
+      <p id="subheadline" class="subheadline"></p>
+
+      <button id="cta" type="button">Loading...</button>
+
+      <p id="message" hidden>Thanks. The conversion was recorded.</p>
+      <p id="error" hidden></p>
+    </main>
+
+    <script>
+      async function initializeTestPage() {
+        const error = document.querySelector('#error');
+        const params = new URLSearchParams(window.location.search);
+
+        const testRunId = params.get('run');
+        const experimentBatch = params.get('batch');
+        const testerId = params.get('tester');
+
+        if (!testRunId || !experimentBatch || !testerId) {
+          error.textContent =
+            'Missing run, batch, or tester URL parameters.';
+          error.hidden = false;
+          return;
+        }
+
+        if (!window.posthog) {
+          error.textContent = 'PostHog is not initialized.';
+          error.hidden = false;
+          return;
+        }
+
+        const response = await fetch(
+          `./content.json?cacheBust=${Date.now()}`,
+        );
+        const content = await response.json();
+
+        document.querySelector('#variant').textContent =
+          content.variantId;
+        document.querySelector('#headline').textContent =
+          content.headline;
+        document.querySelector('#subheadline').textContent =
+          content.subheadline;
+
+        const cta = document.querySelector('#cta');
+        cta.textContent = content.ctaLabel;
+
+        const eventProperties = {
+          test_data: true,
+          test_run_id: testRunId,
+          experiment_batch: experimentBatch,
+          variant_id: content.variantId,
+          headline: content.headline,
+          cta_label: content.ctaLabel,
+        };
+
+        const distinctId =
+          `closed-loop:${testRunId}:${testerId}`;
+
+        posthog.reset(true);
+        posthog.identify(distinctId, {
+          synthetic_test_user: true,
+        });
+        posthog.register(eventProperties);
+        posthog.capture('landing_view', eventProperties);
+
+        cta.addEventListener('click', () => {
+          if (cta.disabled) {
+            return;
+          }
+
+          posthog.capture('cta_click', eventProperties);
+          cta.disabled = true;
+          document.querySelector('#message').hidden = false;
+        });
+      }
+
+      initializeTestPage().catch((cause) => {
+        const error = document.querySelector('#error');
+        error.textContent = `Page initialization failed: ${cause.message}`;
+        error.hidden = false;
+      });
+    </script>
+  </body>
+</html>
